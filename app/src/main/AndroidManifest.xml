@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.here.android.example.basicpositioningsolution">
+
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+    <uses-permission android:name="android.permission.BLUETOOTH"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"/>
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE"/>
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:maxSdkVersion="22" android:name="android.permission.READ_PHONE_STATE"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+
+    <application android:allowBackup="true" android:hardwareAccelerated="true" android:icon="@mipmap/ic_launcher" android:label="@string/app_name">
+        <activity android:label="@string/app_name" android:name=".BasicPositioningActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+
+        <!--Developers should put application credentials here.To obtain them, please register the application
+         at https://developer.here.com/develop/mobile-sdks-->
+        <meta-data
+            android:name="com.here.android.maps.appid"
+            android:value="Rh9C02jG4P3ffjfKtefR" />
+        <meta-data
+            android:name="com.here.android.maps.apptoken"
+            android:value="WSB1nC76-cS6TkmItVbfmQ" />
+        <meta-data
+            android:name="com.here.android.maps.license.key"
+            android:value="ev78RV6JdkSL/RFcORtS/jJT29wmFOjmuAMacU9vxyLR4kPWeTJE54X74bJWj0rM2KfPoSxdSh+asxPFc9HtZeP7LRJBHhC/SlErdGHMLXJMI8CW94rKO0Qg3tyoSyvIEl3W2yQjptFdbLJFBfthgO5flpka/MgNQeSK/47HA1kFm+t7TqiA2q13l11dkWU+0Iz7HhYoSWxR8T72ouTXgjyfjj6pFjgIpVWKGcZkpCuSQcPFLHft2r9DKpo1VPeEbMRgNYx+FgRjC8tYB5cwW/1p0464Xbo796js5LxKLE/AqSCHkc6ecSJhN2PBRKxS75+Dz5sbgb5wi+tzkUqgIvat1m6PrmJHHaIRwheKj0wMf21DfMp2HxSEA5TA7+c419j4Fyixb+fSz8/CWO27ZNlQwUs4oTBAJpVH6LoBTDARuV2eMBDTHPEpVrT+Lur1WozsgOdPPAtb/OiwQ71jOofSUmuO3VIQ5EHsyQQHnXvdl57ipLJ9tCQLaHijJyg7cI1/zsOj1QZcWlyd5BU3LfCQx21ALrvW4FriChknhMVNJ0tDyPN3AEUC+OOcHE9YW4P4r+/WRi9byN0blNUdqycJbqzHClcrDDrwY2LwanJsDYjY+6PMBADKCgDlDsHwzo9h7FZvmRqotv/0ncNFO10lmGQT3LuDIbmVxbJG0PE=" />
+
+         <!--Developers should always provide custom values for each of {YOUR_LABEL_NAME} and {YOUR_INTENT_NAME}.
+         Do not reuse HERE SDK defaults.-->
+        <meta-data
+            android:name="INTENT_NAME"
+            android:value="{YOUR_INTENT_NAME}" />
+        <service
+            android:name="com.here.android.mpa.service.MapService"
+            android:label="{YOUR_LABEL_NAME}"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="{YOUR_INTENT_NAME}"></action>
+            </intent-filter>
+        </service>
+        <!--
+            Embed the HERE Positioning Service.
+            For more information, see the HERE SDK Developer's Guide
+        -->
+        <service android:enabled="true" android:exported="false" android:name="com.here.services.internal.LocationService" android:process=":remote">
+        </service>
+        <!--
+            HERE Location boot receiver definition.
+            For more information, see the HERE SDK Developer's Guide
+        -->
+        <receiver
+            android:name="com.here.services.internal.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+    </application>
+
+</manifest>
