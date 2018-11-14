@@ -32,11 +32,11 @@ public class MyAdapter extends ArrayAdapter<String> {
             LayoutInflater vi = (LayoutInflater) getContext().getSystemService(Context.LAYOUT_INFLATER_SERVICE);
             v = vi.inflate(viewResourceId, null);
         }
-        String customer = items.get(position);
-        if (customer != null) {
-            TextView customerNameLabel = (TextView) v.findViewById(android.R.id.text1);
-            if (customerNameLabel != null) {
-                customerNameLabel.setText(customer);
+        String suggestion = items.get(position);
+        if (suggestion != null) {
+            TextView suggestionNameLabel = (TextView) v.findViewById(android.R.id.text1);
+            if (suggestionNameLabel != null) {
+                suggestionNameLabel.setText(suggestion);
             }
         }
         return v;
@@ -61,8 +61,8 @@ public class MyAdapter extends ArrayAdapter<String> {
         protected FilterResults performFiltering(CharSequence constraint) {
             if(constraint != null) {
                 suggestions.clear();
-                for (String customer : itemsAll) {
-                        suggestions.add(customer);
+                for (String suggestion : itemsAll) {
+                        suggestions.add(suggestion);
                 }
                 FilterResults filterResults = new FilterResults();
                 filterResults.values = suggestions;

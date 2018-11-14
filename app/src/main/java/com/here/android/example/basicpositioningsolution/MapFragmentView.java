@@ -17,8 +17,6 @@
 package com.here.android.example.basicpositioningsolution;
 
 import android.app.Activity;
-import android.app.AlertDialog;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
@@ -26,9 +24,9 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.util.Log;
 import android.view.View;
+import android.widget.AutoCompleteTextView;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import com.here.android.mpa.common.GeoBoundingBox;
@@ -57,6 +55,7 @@ import java.lang.ref.WeakReference;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * This class encapsulates the properties and functionality of the Map view.It also triggers a
@@ -67,8 +66,8 @@ import java.util.List;
 public class MapFragmentView {
     private MapFragment m_mapFragment;
     private Activity m_activity;
-    private static Button m_naviControlButton;
-    private static Button m_createRouteButton;
+    private Button m_naviControlButton;
+    private Button m_createRouteButton;
     private static Map m_map;
     private NavigationManager m_navigationManager;
     private static GeoBoundingBox m_geoBoundingBox;
@@ -76,20 +75,22 @@ public class MapFragmentView {
     private boolean m_foregroundServiceStarted;
     private static GeoCoordinate m_coordinate;
     private static boolean routeCreated = false;
+    private static GeoCoordinate m_destination = null;
+    private static MapRoute oldRoute = null;
+    private static long voiceId;
+    private static AtomicBoolean isVoiceReady = new AtomicBoolean(false);
 
-    public MapFragmentView(Activity activity, GeoCoordinate myCoordinate) {
+    MapFragmentView(Activity activity, GeoCoordinate myCoordinate) {
         m_activity = activity;
         m_coordinate = myCoordinate;
         initNaviControlButton();
+        initializeVoiceInstructions();
     }
 
     public void setCoordinate(GeoCoordinate coordinate){
-        this.m_coordinate = coordinate;
+        m_coordinate = coordinate;
     }
 
-    // Google has deprecated android.app.Fragment class. It is used in current SDK implementation.
-    // Will be fixed in future SDK version.
-    @SuppressWarnings("deprecation")
     private MapFragment getMapFragment() {
         return (MapFragment) m_activity.getFragmentManager().findFragmentById(R.id.mapfragment);
     }
@@ -148,95 +149,105 @@ public class MapFragmentView {
     }
 
     private void createRoute() {
-        /* Initialize a CoreRouter */
-        CoreRouter coreRouter = new CoreRouter();
+        if(m_destination != null) {
+            /* Initialize a CoreRouter */
+            CoreRouter coreRouter = new CoreRouter();
 
-        /* Initialize a RoutePlan */
-        RoutePlan routePlan = new RoutePlan();
+            /* Initialize a RoutePlan */
+            RoutePlan routePlan = new RoutePlan();
 
-        /*
-         * Initialize a RouteOption.HERE SDK allow users to define their own parameters for the
-         * route calculation,including transport modes,route types and route restrictions etc.Please
-         * refer to API doc for full list of APIs
-         */
-        RouteOptions routeOptions = new RouteOptions();
-        /* Other transport modes are also available e.g Pedestrian */
-        routeOptions.setTransportMode(RouteOptions.TransportMode.CAR);
-        /* Disable highway in this route. */
-        routeOptions.setHighwaysAllowed(false);
-        /* Calculate the shortest route available. */
-        routeOptions.setRouteType(RouteOptions.Type.SHORTEST);
-        /* Calculate 1 route. */
-        routeOptions.setRouteCount(1);
-        /* Finally set the route option */
-        routePlan.setRouteOptions(routeOptions);
+            /*
+             * Initialize a RouteOption.HERE SDK allow users to define their own parameters for the
+             * route calculation,including transport modes,route types and route restrictions etc.Please
+             * refer to API doc for full list of APIs
+             */
+            RouteOptions routeOptions = new RouteOptions();
+            /* Other transport modes are also available e.g Pedestrian */
+            routeOptions.setTransportMode(RouteOptions.TransportMode.CAR);
+            /* Disable highway in this route. */
+            routeOptions.setHighwaysAllowed(false);
+            /* Calculate the shortest route available. */
+            routeOptions.setRouteType(RouteOptions.Type.SHORTEST);
+            /* Calculate 1 route. */
+            routeOptions.setRouteCount(1);
+            /* Finally set the route option */
+            routePlan.setRouteOptions(routeOptions);
 
-        /* Define waypoints for the route */
-        /* START: 4350 Still Creek Dr */
-        RouteWaypoint startPoint = new RouteWaypoint(m_coordinate);
-        /* END: Langley BC */
-        RouteWaypoint destination = new RouteWaypoint(new GeoCoordinate(45.7842688, 15.9604736));
+            /* Define waypoints for the route */
+            RouteWaypoint startPoint = new RouteWaypoint(m_coordinate);
+            /* END: Langley BC */
+            RouteWaypoint destination = new RouteWaypoint(m_destination);
 
-        /* Add both waypoints to the route plan */
-        routePlan.addWaypoint(startPoint);
-        routePlan.addWaypoint(destination);
+            /* Add both waypoints to the route plan */
+            routePlan.addWaypoint(startPoint);
+            routePlan.addWaypoint(destination);
 
-        /* Trigger the route calculation,results will be called back via the listener */
-        coreRouter.calculateRoute(routePlan,
-                new Router.Listener<List<RouteResult>, RoutingError>() {
+            /* Trigger the route calculation,results will be called back via the listener */
+            coreRouter.calculateRoute(routePlan,
+                    new Router.Listener<List<RouteResult>, RoutingError>() {
 
-                    @Override
-                    public void onProgress(int i) {
-                        /* The calculation progress can be retrieved in this callback. */
-                    }
+                        @Override
+                        public void onProgress(int i) {
+                            /* The calculation progress can be retrieved in this callback. */
+                        }
 
-                    @Override
-                    public void onCalculateRouteFinished(List<RouteResult> routeResults,
-                            RoutingError routingError) {
-                        /* Calculation is done.Let's handle the result */
-                        if (routingError == RoutingError.NONE) {
-                            if (routeResults.get(0).getRoute() != null) {
+                        @Override
+                        public void onCalculateRouteFinished(List<RouteResult> routeResults,
+                                                             RoutingError routingError) {
+                            /* Calculation is done.Let's handle the result */
+                            if (routingError == RoutingError.NONE) {
+                                if (routeResults.get(0).getRoute() != null) {
 
-                                m_route = routeResults.get(0).getRoute();
-                                /* Create a MapRoute so that it can be placed on the map */
-                                MapRoute mapRoute = new MapRoute(routeResults.get(0).getRoute());
+                                    m_route = routeResults.get(0).getRoute();
+                                    /* Create a MapRoute so that it can be placed on the map */
+                                    MapRoute mapRoute = new MapRoute(routeResults.get(0).getRoute());
 
-                                /* Show the maneuver number on top of the route */
-                                mapRoute.setManeuverNumberVisible(true);
+                                    /* Show the maneuver number on top of the route */
+                                    mapRoute.setManeuverNumberVisible(true);
 
-                                /* Add the MapRoute to the map */
-                                m_map.addMapObject(mapRoute);
-                                /*
-                                 * We may also want to make sure the map view is orientated properly
-                                 * so the entire route can be easily seen.
-                                 */
-                                m_geoBoundingBox = routeResults.get(0).getRoute().getBoundingBox();
-                                m_map.zoomTo(m_geoBoundingBox, Map.Animation.LINEAR,
-                                        Map.MOVE_PRESERVE_ORIENTATION);
-                                routeCreated = true;
-                                EditText textview = (EditText) m_activity.findViewById(R.id.instructions);
-                                textview.setText("Lenght of this route is " + m_route.getLength()+"m");
+                                    /* Add the MapRoute to the map */
+                                    m_map.addMapObject(mapRoute);
+                                    if(oldRoute != null)
+                                        m_map.removeMapObject(oldRoute);
+                                    oldRoute = mapRoute;
+                                    /*
+                                     * We may also want to make sure the map view is orientated properly
+                                     * so the entire route can be easily seen.
+                                     */
+                                    m_geoBoundingBox = routeResults.get(0).getRoute().getBoundingBox();
+                                    m_map.zoomTo(m_geoBoundingBox, Map.Animation.LINEAR,
+                                            Map.MOVE_PRESERVE_ORIENTATION);
+                                    routeCreated = true;
+                                    EditText textview = (EditText) m_activity.findViewById(R.id.instructions);
+                                    textview.setText("Lenght of this route is " + m_route.getLength() + "m");
+                                } else {
+                                    Toast.makeText(m_activity,
+                                            "Error:route results returned is not valid",
+                                            Toast.LENGTH_LONG).show();
+                                }
                             } else {
                                 Toast.makeText(m_activity,
-                                        "Error:route results returned is not valid",
+                                        "Error:route calculation returned error code: " + routingError,
                                         Toast.LENGTH_LONG).show();
-                            }
-                        } else {
-                            Toast.makeText(m_activity,
-                                    "Error:route calculation returned error code: " + routingError,
-                                    Toast.LENGTH_LONG).show();
 
+                            }
                         }
-                    }
-                });
+                    });
+        }
+        else {
+            Toast.makeText(m_activity,
+                    "Please chose destination first!",
+                    Toast.LENGTH_LONG).show();
+
+        }
     }
 
     private void initNaviControlButton() {
         m_naviControlButton = (Button) m_activity.findViewById(R.id.naviCtrlButton);
         m_createRouteButton = (Button)m_activity.findViewById(R.id.createRouteButton);
         m_createRouteButton.setOnClickListener(new View.OnClickListener() {
-            @Override
 
+            @Override
             public void onClick(View v) {
                 /*
                  * To start a turn-by-turn navigation, a concrete route object is required.We use
@@ -249,30 +260,35 @@ public class MapFragmentView {
                  * INSUFFICIENT_MAP_DATA error code may be returned by CoreRouter in this case.
                  *
                  */
+                AutoCompleteTextView textView = (AutoCompleteTextView)m_activity.findViewById(R.id.autoCompleteTextView);
+                    m_destination = BasicPositioningActivity.getPlaceGeoCordinate(textView.getText().toString());
                     initMapFragment();
                     createRoute();
-                    m_naviControlButton.setOnClickListener(new View.OnClickListener() {
-                    @Override
-                    public void onClick(View v) {
-                        if (routeCreated) {
-                            startNavigation();
-                            routeCreated = false;
-                            m_createRouteButton.setVisibility(View.INVISIBLE);
-                        }
-                        else {
-                            m_navigationManager.stop();
-                            /*
-                             * Restore the map orientation to show entire route on screen
-                             */
-                            m_map.zoomTo(m_geoBoundingBox, Map.Animation.LINEAR, 0f);
-                            m_naviControlButton.setText(R.string.start_navi);
-                            routeCreated = true;
-                            m_createRouteButton.setVisibility(View.VISIBLE);
-                        }
-                    }
-                });
             }
         });
+
+        m_naviControlButton.setOnClickListener(new View.OnClickListener() {
+               @Override
+               public void onClick(View v) {
+                   if (oldRoute != null && isVoiceReady.get()) {
+                       if (routeCreated) {
+                           startNavigation();
+                           routeCreated = false;
+                           m_createRouteButton.setVisibility(View.INVISIBLE);
+                       } else {
+                           m_navigationManager.stop();
+                           /*
+                            * Restore the map orientation to show entire route on screen
+                            */
+                           m_map.zoomTo(m_geoBoundingBox, Map.Animation.LINEAR, 0f);
+                           m_naviControlButton.setText(R.string.start_navi);
+                           routeCreated = true;
+                           m_createRouteButton.setVisibility(View.VISIBLE);
+                       }
+                   }
+               }
+           }
+        );
     }
 
     /*
@@ -305,6 +321,7 @@ public class MapFragmentView {
         m_naviControlButton.setText(R.string.stop_navi);
         /* Configure Navigation manager to launch navigation on current map */
         m_navigationManager.setMap(m_map);
+        VoiceCatalog voiceCatalog = VoiceCatalog.getInstance();
 
         /*
          * Start the turn-by-turn navigation.Please note if the transport mode of the passed-in
@@ -329,6 +346,10 @@ public class MapFragmentView {
                 m_navigationManager.simulate(m_route,25);//Simualtion speed is set to 25 m/s
                 m_map.setTilt(60);
                 startForegroundService();
+                m_navigationManager.stopSpeedWarning();
+                VoiceGuidanceOptions vgo = m_navigationManager.getVoiceGuidanceOptions();
+                vgo.setVoiceSkin(voiceCatalog.getLocalVoiceSkin(voiceId));
+
             /*};
         });
         AlertDialog alertDialog = alertDialogBuilder.create();
@@ -348,44 +369,6 @@ public class MapFragmentView {
          * listeners for demo purpose,please refer to HERE Android SDK API documentation for details
          */
         addNavigationListeners();
-    }
-
-    private void initializeVoiceInstructions(){
-        VoiceCatalog voiceCatalog = VoiceCatalog.getInstance();
-        voiceCatalog.downloadCatalog(new VoiceCatalog.OnDownloadDoneListener() {
-            @Override
-            public void onDownloadDone(VoiceCatalog.Error error) {
-                if (error == VoiceCatalog.Error.NONE) {
-                    // catalog download successful
-                }
-            }
-        });
-
-        List<VoicePackage> voicePackages = VoiceCatalog.getInstance().getCatalogList();
-
-        long id = -1;
-
-        // select
-        for (VoicePackage vPackage : voicePackages) {
-            if (vPackage.getMarcCode().compareToIgnoreCase("eng") == 0) {
-                if (vPackage.isTts()) {
-                    id = vPackage.getId();
-                    break;
-                }
-            }
-        }
-
-        if (!voiceCatalog.isLocalVoiceSkin(id))
-        {
-            voiceCatalog.downloadVoice(id, new VoiceCatalog.OnDownloadDoneListener() {
-                @Override
-                public void onDownloadDone(VoiceCatalog.Error errorCode) {
-                    if (errorCode == VoiceCatalog.Error.NONE){
-                        //voice skin download successful
-                    }
-                }
-            });
-        }
     }
 
     private void addNavigationListeners() {
@@ -415,13 +398,13 @@ public class MapFragmentView {
 
 
                     String turn = (m_navigationManager.getNextManeuver().getTurn().name());
-                    turn = turn.split("_")[1].toLowerCase();
+                    //turn = turn.split("_")[1].toLowerCase();
 
                     String roadName = (maneuver.getNextRoadName());
 
                     long distanceLong = m_navigationManager.getNextManeuverDistance();
 
-                    Double toBeTruncated = Double.valueOf(distanceLong);
+                    Double toBeTruncated = (double) distanceLong;
 
                     if (toBeTruncated > 1000) {
                         toBeTruncated = toBeTruncated / 1000;
@@ -513,4 +496,61 @@ public class MapFragmentView {
             m_navigationManager.stop();
         }
     }
+
+    private void initializeVoiceInstructions(){
+        VoiceCatalog voiceCatalog = VoiceCatalog.getInstance();
+
+            voiceCatalog.downloadCatalog(new VoiceCatalog.OnDownloadDoneListener() {
+                @Override
+                public void onDownloadDone(VoiceCatalog.Error error) {
+                    if (error == VoiceCatalog.Error.NONE) {
+                        Toast.makeText(m_activity, "Catalog download success", Toast.LENGTH_SHORT).show();
+                    }
+                    else {
+                        Toast.makeText(m_activity, "Catalog download fail", Toast.LENGTH_SHORT).show();
+                    }
+                }
+            });
+
+            List<VoicePackage> voicePackages = VoiceCatalog.getInstance().getCatalogList();
+
+            long id = -1;
+
+            // select
+            for (VoicePackage vPackage : voicePackages) {
+                if (vPackage.getMarcCode().compareToIgnoreCase("eng") == 0) {
+                    if (!vPackage.isTts() && vPackage.getGender().equals(VoicePackage.Gender.FEMALE)) {
+                        id = vPackage.getId();
+                        voiceId = id;
+                        break;
+                    }
+                }
+            }
+
+            if (!voiceCatalog.isLocalVoiceSkin(id)) {
+                voiceCatalog.downloadVoice(id, new VoiceCatalog.OnDownloadDoneListener() {
+                    @Override
+                    public void onDownloadDone(VoiceCatalog.Error errorCode) {
+                        if (errorCode == VoiceCatalog.Error.NONE) {
+                            Toast.makeText(m_activity, "English voice success", Toast.LENGTH_SHORT).show();
+                            isVoiceReady.set(true);
+                        }
+                        else {
+                            Toast.makeText(m_activity, "English voice fail", Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                });
+            }
+            else{
+                isVoiceReady.set(true);
+            }
+        voiceCatalog.setOnProgressEventListener(new VoiceCatalog.OnProgressListener() {
+            @Override
+            public void onProgress(int i) {
+                EditText textview = (EditText) m_activity.findViewById(R.id.instructions);
+                textview.setText("Downloaded: "+i+"%");
+            }
+        });
+    }
+
 }

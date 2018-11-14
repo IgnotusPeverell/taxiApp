@@ -25,11 +25,14 @@ import android.content.pm.PackageManager;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.util.JsonReader;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -73,6 +76,10 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.net.ssl.HttpsURLConnection;
 
@@ -111,13 +118,18 @@ public class BasicPositioningActivity extends Activity implements PositioningMan
     private static AutoCompleteTextView textView;
     private static String results = "";
     private static String resultsPlaces = "";
-
+    private static LinkedList<JSONObject> resourceList = new LinkedList<>();
+    private static String mappSuggestions = "";
+    private static String placesSuggestion = "";
+    public static GeoCoordinate destionationCoordinate;
 
     // permissions that need to be explicitly requested from end user.
     private static final String[] REQUIRED_SDK_PERMISSIONS = new String[] {
         Manifest.permission.ACCESS_FINE_LOCATION,
         Manifest.permission.WRITE_EXTERNAL_STORAGE
     };
+
+
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -133,59 +145,46 @@ public class BasicPositioningActivity extends Activity implements PositioningMan
         textView.setAdapter(adapter);
 
         textView.addTextChangedListener(new TextWatcher() {
+
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-
             }
 
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
-                //retrieveData(s);
+                retrieveData(s);
             }
 
             @Override
-            public void afterTextChanged(Editable s) {
-                retrieveData(s); //this will call your method every time the user stops typing, if you want to call it for each letter, call it in onTextChanged
-
+            public void afterTextChanged(final Editable s) {
             }
         });
 
     }
 
-    private void retrieveData(CharSequence s) {
+    private final void retrieveData(CharSequence s) {
         ArrayList<String> listOfSuggestions = new ArrayList<>();
         s = s.toString().replaceAll(" ","+");
-        new RetrieveSuggestions().
-                execute("http://autocomplete.geocoder.api.here.com/6.2/suggest.json?app_id=pLCLPwCWaHC0UeB0BjyS&app_code=yVc4Gm7TWEjDmzSLA_k06w&query="+s);
-
         JSONObject jsonResults = null;
-        try {
-            jsonResults = new JSONObject(results);
-            JSONArray jsonArray = (JSONArray)jsonResults.get("suggestions");
-            jsonArray.length();
+        resourceList.clear();
 
-            for (int i = 0; i<jsonArray.length(); i++){
-                JSONObject suggestion = (JSONObject)jsonArray.get(i);
-                listOfSuggestions.add(suggestion.get("label").toString());
-            }
-        } catch (JSONException e) {
-            e.printStackTrace();
-        }
-
-        new RetrieveSuggestionsPlaces().execute(
+        new RetrieveSuggestions().execute(
                 "https://places.cit.api.here.com/places/v1/autosuggest?at=45.8150108,15.9819188&q="+s+"&app_id=pLCLPwCWaHC0UeB0BjyS&app_code=yVc4Gm7TWEjDmzSLA_k06w"
         );
 
         jsonResults = null;
         try {
-            jsonResults = new JSONObject(resultsPlaces);
+            jsonResults = new JSONObject(results);
             JSONArray jsonArray = (JSONArray)jsonResults.get("results");
             jsonArray.length();
 
             for (int i = 0; i<jsonArray.length(); i++){
                 JSONObject suggestion = (JSONObject)jsonArray.get(i);
                 try {
-                    listOfSuggestions.add(suggestion.get("title").toString()+","+suggestion.get("vicinity").toString().replaceAll("<br/>", ""));
+                    listOfSuggestions.add(suggestion.get("title").toString()+","+suggestion.get("vicinity").toString().replaceAll("<br/>", ","));
+                    resourceList.add(suggestion);
+                    if(listOfSuggestions.size() > 5)
+                        break;
                 } catch (Exception e) {
 
                 }
@@ -193,11 +192,46 @@ public class BasicPositioningActivity extends Activity implements PositioningMan
         } catch (JSONException e) {
             e.printStackTrace();
         }
-
+        results = "";
         adapter.clear();
         adapter.addAll(listOfSuggestions);
         adapter.notifyDataSetChanged();
 
+    }
+
+    public static GeoCoordinate getPlaceGeoCordinate(String placeName) {
+        GeoCoordinate returnCoordinate = null;
+        String position = "";
+        for(JSONObject place : resourceList){
+            try {
+                if((place.get("title").toString()+","+place.get("vicinity").toString().replaceAll("<br/>", ",")).toLowerCase().equals(placeName.toLowerCase())){
+                    position = place.get("position").toString();
+                    break;
+                }
+            } catch (Exception e) {
+
+            }
+        }
+
+        if(position.equals("")){
+            for(JSONObject place : resourceList){
+                try {
+                    if((place.get("title").toString()+","+place.get("vicinity").toString().replaceAll("<br/>", ",")).toLowerCase().contains(placeName.toLowerCase())){
+                        position = place.get("position").toString();
+                        break;
+                    }
+                } catch (Exception e) {
+
+                }
+            }
+        }
+
+        if(!position.equals("")){
+            position = position.replace("[", "");
+            position = position.replace("]", "");
+            returnCoordinate = new GeoCoordinate(Double.parseDouble(position.split(",")[0]),Double.parseDouble(position.split(",")[1]));
+        }
+        return returnCoordinate;
     }
 
     public void initializeFindMeButton(){
@@ -305,9 +339,6 @@ public class BasicPositioningActivity extends Activity implements PositioningMan
         }
     }
 
-    // Google has deprecated android.app.Fragment class. It is used in current SDK implementation.
-    // Will be fixed in future SDK version.
-    @SuppressWarnings("deprecation")
     private MapFragment getMapFragment() {
         return (MapFragment)getFragmentManager().findFragmentById(R.id.mapfragment);
     }
@@ -426,7 +457,7 @@ public class BasicPositioningActivity extends Activity implements PositioningMan
         }
     }
 
-    private class RetrieveSuggestions extends AsyncTask<String, Void, String> {
+    private static class RetrieveSuggestions extends AsyncTask<String, Void, String> {
 
         private Exception exception;
 
@@ -468,45 +499,5 @@ public class BasicPositioningActivity extends Activity implements PositioningMan
         }
     }
 
-    private class RetrieveSuggestionsPlaces extends AsyncTask<String, Void, String> {
 
-        private Exception exception;
-
-        protected String doInBackground(String... urls) {
-            try {
-                String ret = "";
-
-                URL url;
-                try {
-                    HttpURLConnection con;
-                    url = new URL(urls[0]);
-                    con = (HttpURLConnection) url.openConnection();
-                    con.setRequestMethod("GET");
-
-                    BufferedReader in = new BufferedReader(
-                            new InputStreamReader(con.getInputStream()));
-                    String inputLine;
-                    StringBuffer response = new StringBuffer();
-
-                    while ((inputLine = in.readLine()) != null) {
-                        response.append(inputLine);
-                    }
-                    in.close();
-                    ret = response.toString();
-
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-
-                return ret;
-            } catch (Exception e) {
-                this.exception = e;
-                return null;
-            }
-        }
-
-        protected void onPostExecute(String result) {
-            resultsPlaces = result;
-        }
-    }
 }
