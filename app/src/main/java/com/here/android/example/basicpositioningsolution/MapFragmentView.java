@@ -528,7 +528,7 @@ public class MapFragmentView {
                                 break;
                             }
                         }
-                    }
+                    } 
                     voiceCatalog.deleteVoiceSkin(voiceId);
                     voiceCatalog.setOnProgressEventListener(new VoiceCatalog.OnProgressListener() {
                         @Override
