@@ -20,6 +20,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
 import android.util.Log;
@@ -27,6 +28,7 @@ import android.view.View;
 import android.widget.AutoCompleteTextView;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.here.android.mpa.common.GeoBoundingBox;
@@ -84,6 +86,7 @@ public class MapFragmentView {
         m_activity = activity;
         m_coordinate = myCoordinate;
         initNaviControlButton();
+        //new DownloadVoiceSkin().execute("");
         initializeVoiceInstructions();
     }
 
@@ -149,7 +152,8 @@ public class MapFragmentView {
     }
 
     private void createRoute() {
-        if(m_destination != null) {
+
+        if(m_destination != null && m_coordinate != null) {
             /* Initialize a CoreRouter */
             CoreRouter coreRouter = new CoreRouter();
 
@@ -234,11 +238,16 @@ public class MapFragmentView {
                         }
                     });
         }
-        else {
+        else if(m_destination == null){
             Toast.makeText(m_activity,
                     "Please chose destination first!",
                     Toast.LENGTH_LONG).show();
 
+        }
+        else {
+            Toast.makeText(m_activity,
+                    "You need to turn on navigation service!",
+                    Toast.LENGTH_LONG).show();
         }
     }
 
@@ -343,7 +352,7 @@ public class MapFragmentView {
         });
         alertDialogBuilder.setPositiveButton("Simulation",new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface dialoginterface, int i) {*/
-                m_navigationManager.simulate(m_route,25);//Simualtion speed is set to 25 m/s
+                m_navigationManager.simulate(m_route, 25);//Simualtion speed is set to 25 m/s
                 m_map.setTilt(60);
                 startForegroundService();
                 m_navigationManager.stopSpeedWarning();
@@ -500,57 +509,59 @@ public class MapFragmentView {
     private void initializeVoiceInstructions(){
         VoiceCatalog voiceCatalog = VoiceCatalog.getInstance();
 
-            voiceCatalog.downloadCatalog(new VoiceCatalog.OnDownloadDoneListener() {
-                @Override
-                public void onDownloadDone(VoiceCatalog.Error error) {
-                    if (error == VoiceCatalog.Error.NONE) {
-                        Toast.makeText(m_activity, "Catalog download success", Toast.LENGTH_SHORT).show();
-                    }
-                    else {
-                        Toast.makeText(m_activity, "Catalog download fail", Toast.LENGTH_SHORT).show();
-                    }
-                }
-            });
-
-            List<VoicePackage> voicePackages = VoiceCatalog.getInstance().getCatalogList();
-
-            long id = -1;
-
-            // select
-            for (VoicePackage vPackage : voicePackages) {
-                if (vPackage.getMarcCode().compareToIgnoreCase("eng") == 0) {
-                    if (!vPackage.isTts() && vPackage.getGender().equals(VoicePackage.Gender.FEMALE)) {
-                        id = vPackage.getId();
-                        voiceId = id;
-                        break;
-                    }
-                }
-            }
-
-            if (!voiceCatalog.isLocalVoiceSkin(id)) {
-                voiceCatalog.downloadVoice(id, new VoiceCatalog.OnDownloadDoneListener() {
-                    @Override
-                    public void onDownloadDone(VoiceCatalog.Error errorCode) {
-                        if (errorCode == VoiceCatalog.Error.NONE) {
-                            Toast.makeText(m_activity, "English voice success", Toast.LENGTH_SHORT).show();
-                            isVoiceReady.set(true);
-                        }
-                        else {
-                            Toast.makeText(m_activity, "English voice fail", Toast.LENGTH_SHORT).show();
-                        }
-                    }
-                });
-            }
-            else{
-                isVoiceReady.set(true);
-            }
-        voiceCatalog.setOnProgressEventListener(new VoiceCatalog.OnProgressListener() {
+        voiceCatalog.downloadCatalog(new VoiceCatalog.OnDownloadDoneListener() {
             @Override
-            public void onProgress(int i) {
-                EditText textview = (EditText) m_activity.findViewById(R.id.instructions);
-                textview.setText("Downloaded: "+i+"%");
+            public void onDownloadDone(VoiceCatalog.Error error) {
+                if (error == VoiceCatalog.Error.NONE) {
+                    Toast.makeText(m_activity, "Catalog download success", Toast.LENGTH_SHORT).show();
+
+                    List<VoicePackage> voicePackages = VoiceCatalog.getInstance().getCatalogList();
+
+                    long id = -1;
+
+                    // select
+                    for (VoicePackage vPackage : voicePackages) {
+                        if (vPackage.getMarcCode().compareToIgnoreCase("eng") == 0) {
+                            if (!vPackage.isTts() && vPackage.getGender().equals(VoicePackage.Gender.FEMALE)) {
+                                id = vPackage.getId();
+                                voiceId = id;
+                                break;
+                            }
+                        }
+                    }
+                    voiceCatalog.deleteVoiceSkin(voiceId);
+                    voiceCatalog.setOnProgressEventListener(new VoiceCatalog.OnProgressListener() {
+                        @Override
+                        public void onProgress(int i) {
+                            EditText textview = (EditText) m_activity.findViewById(R.id.instructions);
+                            textview.setText("Downloaded: "+i+"%");
+                        }
+                    });
+
+                    if (!voiceCatalog.isLocalVoiceSkin(id)) {
+                        voiceCatalog.downloadVoice(id, new VoiceCatalog.OnDownloadDoneListener() {
+                            @Override
+                            public void onDownloadDone(VoiceCatalog.Error errorCode) {
+                                if (errorCode == VoiceCatalog.Error.NONE) {
+                                    Toast.makeText(m_activity, "English voice download success", Toast.LENGTH_SHORT).show();
+                                    EditText textview = (EditText) m_activity.findViewById(R.id.instructions);
+                                    textview.setText("Finished Downloading");
+                                    isVoiceReady.set(true);
+                                }
+                                else {
+                                    Toast.makeText(m_activity, "English voice fail", Toast.LENGTH_SHORT).show();
+                                }
+                            }
+                        });
+                    }
+                    else{
+                        isVoiceReady.set(true);
+                    }
+                }
+                else {
+                    Toast.makeText(m_activity, "Catalog download fail", Toast.LENGTH_SHORT).show();
+                }
             }
         });
     }
-
 }

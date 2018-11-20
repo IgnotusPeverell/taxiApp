@@ -19,14 +19,18 @@ package com.here.android.example.basicpositioningsolution;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.Context;
 import android.content.DialogInterface;
+import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.location.LocationManager;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.Settings;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
@@ -136,7 +140,7 @@ public class BasicPositioningActivity extends Activity implements PositioningMan
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         checkPermissions();
-
+        checkLocationService();
         adapter = new MyAdapter(this,
                 android.R.layout.simple_dropdown_item_1line, suggestions);
 
@@ -162,11 +166,52 @@ public class BasicPositioningActivity extends Activity implements PositioningMan
 
     }
 
+    private void checkLocationService() {
+
+        LocationManager lm = (LocationManager)BasicPositioningActivity.this.getSystemService(Context.LOCATION_SERVICE);
+        boolean gps_enabled = false;
+        boolean network_enabled = false;
+
+        try {
+            gps_enabled = lm.isProviderEnabled(LocationManager.GPS_PROVIDER);
+        } catch(Exception ex) {}
+
+        try {
+            network_enabled = lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
+        } catch(Exception ex) {}
+
+        if(!gps_enabled && !network_enabled) {
+            // notify user
+            AlertDialog.Builder dialog = new AlertDialog.Builder(BasicPositioningActivity.this);
+            dialog.setMessage("Gps is not enabled!");
+            dialog.setPositiveButton("open_location_settings", new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface paramDialogInterface, int paramInt) {
+                    // TODO Auto-generated method stub
+                    Intent myIntent = new Intent( Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+                    BasicPositioningActivity.this.startActivity(myIntent);
+                    //get gps
+                }
+            });
+            dialog.setNegativeButton("Cancle", new DialogInterface.OnClickListener() {
+
+                @Override
+                public void onClick(DialogInterface paramDialogInterface, int paramInt) {
+                    // TODO Auto-generated method stub
+
+                }
+            });
+            dialog.show();
+        }
+
+    }
+
     private final void retrieveData(CharSequence s) {
         ArrayList<String> listOfSuggestions = new ArrayList<>();
         s = s.toString().replaceAll(" ","+");
         JSONObject jsonResults = null;
-        resourceList.clear();
+        if(resourceList.size() > 1000)
+            resourceList.clear();
 
         new RetrieveSuggestions().execute(
                 "https://places.cit.api.here.com/places/v1/autosuggest?at=45.8150108,15.9819188&q="+s+"&app_id=pLCLPwCWaHC0UeB0BjyS&app_code=yVc4Gm7TWEjDmzSLA_k06w"
@@ -174,6 +219,7 @@ public class BasicPositioningActivity extends Activity implements PositioningMan
 
         jsonResults = null;
         try {
+
             jsonResults = new JSONObject(results);
             JSONArray jsonArray = (JSONArray)jsonResults.get("results");
             jsonArray.length();
