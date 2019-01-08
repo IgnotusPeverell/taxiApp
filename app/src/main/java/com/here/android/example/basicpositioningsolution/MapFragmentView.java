@@ -28,6 +28,7 @@ import android.view.View;
 import android.widget.AutoCompleteTextView;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -81,13 +82,15 @@ public class MapFragmentView {
     private static MapRoute oldRoute = null;
     private static long voiceId;
     private static AtomicBoolean isVoiceReady = new AtomicBoolean(false);
+    private Switch m_voiceSwitch;
 
     MapFragmentView(Activity activity, GeoCoordinate myCoordinate) {
         m_activity = activity;
         m_coordinate = myCoordinate;
-        initNaviControlButton();
-        //new DownloadVoiceSkin().execute("");
         initializeVoiceInstructions();
+        initNaviControlButton();
+        m_navigationManager = NavigationManager.getInstance();
+        //new DownloadVoiceSkin().execute("");
     }
 
     public void setCoordinate(GeoCoordinate coordinate){
@@ -123,7 +126,7 @@ public class MapFragmentView {
             // Also, ensure the provided intent name does not match the default intent name.
         } else {
             if (m_mapFragment != null) {
-            /* Initialize the MapFragment, results will be given via the called back. */
+                /* Initialize the MapFragment, results will be given via the called back. */
                 m_mapFragment.init(new OnEngineInitListener() {
                     @Override
                     public void onEngineInitializationCompleted(OnEngineInitListener.Error error) {
@@ -135,11 +138,10 @@ public class MapFragmentView {
                             //Put this call in Map.onTransformListener if the animation(Linear/Bow)
                             //is used in setCenter()
                             m_map.setZoomLevel(13.2);*/
-                        /*
-                         * Get the NavigationManager instance.It is responsible for providing voice
-                         * and visual instructions while driving and walking
-                         */
-                            m_navigationManager = NavigationManager.getInstance();
+                            /*
+                             * Get the NavigationManager instance.It is responsible for providing voice
+                             * and visual instructions while driving and walking
+                             */
                         } else {
                             Toast.makeText(m_activity,
                                     "ERROR: Cannot initialize Map with error " + error,
@@ -169,11 +171,13 @@ public class MapFragmentView {
             /* Other transport modes are also available e.g Pedestrian */
             routeOptions.setTransportMode(RouteOptions.TransportMode.CAR);
             /* Disable highway in this route. */
-            routeOptions.setHighwaysAllowed(false);
+            routeOptions.setHighwaysAllowed(true);
             /* Calculate the shortest route available. */
             routeOptions.setRouteType(RouteOptions.Type.SHORTEST);
             /* Calculate 1 route. */
             routeOptions.setRouteCount(1);
+            routeOptions.setTollRoadsAllowed(true);
+            routeOptions.setTunnelsAllowed(true);
             /* Finally set the route option */
             routePlan.setRouteOptions(routeOptions);
 
@@ -270,34 +274,52 @@ public class MapFragmentView {
                  *
                  */
                 AutoCompleteTextView textView = (AutoCompleteTextView)m_activity.findViewById(R.id.autoCompleteTextView);
-                    m_destination = BasicPositioningActivity.getPlaceGeoCordinate(textView.getText().toString());
-                    initMapFragment();
-                    createRoute();
+                m_destination = BasicPositioningActivity.getPlaceGeoCordinate(textView.getText().toString());
+                initMapFragment();
+                createRoute();
+
             }
         });
 
         m_naviControlButton.setOnClickListener(new View.OnClickListener() {
-               @Override
-               public void onClick(View v) {
-                   if (oldRoute != null && isVoiceReady.get()) {
-                       if (routeCreated) {
-                           startNavigation();
-                           routeCreated = false;
-                           m_createRouteButton.setVisibility(View.INVISIBLE);
-                       } else {
-                           m_navigationManager.stop();
-                           /*
-                            * Restore the map orientation to show entire route on screen
-                            */
-                           m_map.zoomTo(m_geoBoundingBox, Map.Animation.LINEAR, 0f);
-                           m_naviControlButton.setText(R.string.start_navi);
-                           routeCreated = true;
-                           m_createRouteButton.setVisibility(View.VISIBLE);
-                       }
-                   }
-               }
-           }
+                                                   @Override
+                                                   public void onClick(View v) {
+                                                       if (oldRoute != null && isVoiceReady.get()) {
+                                                           if (routeCreated) {
+                                                               startNavigation();
+                                                               routeCreated = false;
+                                                               m_createRouteButton.setVisibility(View.INVISIBLE);
+                                                           } else {
+                                                               m_navigationManager.stop();
+                                                               /*
+                                                                * Restore the map orientation to show entire route on screen
+                                                                */
+                                                               m_map.zoomTo(m_geoBoundingBox, Map.Animation.LINEAR, 0f);
+                                                               m_naviControlButton.setText(R.string.start_navi);
+                                                               routeCreated = true;
+                                                               m_createRouteButton.setVisibility(View.VISIBLE);
+                                                           }
+                                                       }
+                                                   }
+                                               }
         );
+
+        m_voiceSwitch = (Switch) m_activity.findViewById(R.id.voiceSwitch);
+
+
+        m_voiceSwitch.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if(m_voiceSwitch.isChecked()){
+                    m_navigationManager.getAudioPlayer().setVolume(NavigationManager.AudioPlayer.DEFAULT_AUDIO_VOLUME);
+                    m_navigationManager.repeatVoiceCommand();
+                }
+                else {
+                    m_navigationManager.getAudioPlayer().setVolume(0);
+                }
+            }
+        });
+
     }
 
     /*
@@ -330,7 +352,7 @@ public class MapFragmentView {
         m_naviControlButton.setText(R.string.stop_navi);
         /* Configure Navigation manager to launch navigation on current map */
         m_navigationManager.setMap(m_map);
-        VoiceCatalog voiceCatalog = VoiceCatalog.getInstance();
+
 
         /*
          * Start the turn-by-turn navigation.Please note if the transport mode of the passed-in
@@ -345,24 +367,33 @@ public class MapFragmentView {
         alertDialogBuilder.setMessage("Choose Mode");
         alertDialogBuilder.setNegativeButton("Navigation",new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface dialoginterface, int i) {*/
-                /*m_navigationManager.startNavigation(m_route); //NAVIGATION!!
-                m_map.setTilt(60);
-                startForegroundService();*/
+        m_navigationManager.startNavigation(m_route); //NAVIGATION!!
+        m_map.setTilt(60);
+        startForegroundService();
            /* };
         });
         alertDialogBuilder.setPositiveButton("Simulation",new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface dialoginterface, int i) {*/
-                m_navigationManager.simulate(m_route, 25);//Simualtion speed is set to 25 m/s
-                m_map.setTilt(60);
-                startForegroundService();
-                m_navigationManager.stopSpeedWarning();
-                VoiceGuidanceOptions vgo = m_navigationManager.getVoiceGuidanceOptions();
-                vgo.setVoiceSkin(voiceCatalog.getLocalVoiceSkin(voiceId));
+        //m_navigationManager.simulate(m_route, 25);//Simualtion speed is set to 25 m/s
+        //m_map.setTilt(60);
+        //startForegroundService();
+
 
             /*};
         });
         AlertDialog alertDialog = alertDialogBuilder.create();
         alertDialog.show();*/
+
+        VoiceCatalog voiceCatalog = VoiceCatalog.getInstance();
+        VoiceGuidanceOptions vgo = m_navigationManager.getVoiceGuidanceOptions();
+        vgo.setVoiceSkin(voiceCatalog.getLocalVoiceSkin(voiceId));
+
+        m_navigationManager.getAudioPlayer().setVolume(0);
+
+        m_navigationManager.stopSpeedWarning();
+
+
+
 
         /*
          * Set the map update mode to ROADVIEW.This will enable the automatic map movement based on
@@ -481,6 +512,11 @@ public class MapFragmentView {
 
         @Override
         public void onRouteUpdated(Route route) {
+            MapRoute newRoute = new MapRoute(route);
+            m_map.addMapObject(newRoute);
+            if(oldRoute != null)
+                m_map.removeMapObject(oldRoute);
+            oldRoute = newRoute;
             Toast.makeText(m_activity, "Route updated", Toast.LENGTH_SHORT).show();
         }
 
@@ -513,7 +549,6 @@ public class MapFragmentView {
             @Override
             public void onDownloadDone(VoiceCatalog.Error error) {
                 if (error == VoiceCatalog.Error.NONE) {
-                    Toast.makeText(m_activity, "Catalog download success", Toast.LENGTH_SHORT).show();
 
                     List<VoicePackage> voicePackages = VoiceCatalog.getInstance().getCatalogList();
 
@@ -528,8 +563,8 @@ public class MapFragmentView {
                                 break;
                             }
                         }
-                    } 
-                    voiceCatalog.deleteVoiceSkin(voiceId);
+                    }
+
                     voiceCatalog.setOnProgressEventListener(new VoiceCatalog.OnProgressListener() {
                         @Override
                         public void onProgress(int i) {
